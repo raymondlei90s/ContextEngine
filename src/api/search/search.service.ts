@@ -6,6 +6,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { knowledgeGraphService } from '../../services/knowledge-graph.js';
+import { relationshipAnalyzer } from '../../services/relationship-analyzer.js';
 
 const prisma = new PrismaClient();
 
@@ -56,5 +57,51 @@ export class SearchService {
    */
   async getStatistics(projectId: string) {
     return await knowledgeGraphService.getStatistics(projectId);
+  }
+
+  /**
+   * Analyze dependency chains
+   */
+  async analyzeDependencies(
+    projectId: string,
+    entityId: string,
+    maxDepth: number = 3
+  ) {
+    return await relationshipAnalyzer.analyzeDependencies(
+      projectId,
+      entityId,
+      maxDepth
+    );
+  }
+
+  /**
+   * Generate graph visualization data
+   */
+  async getGraphVisualization(projectId: string, options?: any) {
+    return await relationshipAnalyzer.generateGraphVisualization(
+      projectId,
+      options
+    );
+  }
+
+  /**
+   * Find critical entities
+   */
+  async findCriticalEntities(projectId: string, limit: number = 10) {
+    return await relationshipAnalyzer.findCriticalEntities(projectId, limit);
+  }
+
+  /**
+   * Find orphaned entities
+   */
+  async findOrphanedEntities(projectId: string) {
+    return await relationshipAnalyzer.findOrphanedEntities(projectId);
+  }
+
+  /**
+   * Get relationship statistics
+   */
+  async getRelationshipStatistics(projectId: string) {
+    return await relationshipAnalyzer.getRelationshipStatistics(projectId);
   }
 }

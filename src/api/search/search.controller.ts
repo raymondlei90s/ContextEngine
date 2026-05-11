@@ -63,4 +63,77 @@ export class SearchController {
   async getStatistics(@Param('projectId') projectId: string) {
     return await this.searchService.getStatistics(projectId);
   }
+
+  /**
+   * Analyze dependency chains for an entity
+   */
+  @Get('dependencies/:entityId')
+  async analyzeDependencies(
+    @Param('entityId') entityId: string,
+    @Query('projectId') projectId: string,
+    @Query('maxDepth') maxDepth?: string
+  ) {
+    return await this.searchService.analyzeDependencies(
+      projectId,
+      entityId,
+      maxDepth ? parseInt(maxDepth) : 3
+    );
+  }
+
+  /**
+   * Generate graph visualization data
+   */
+  @Get('graph/:projectId')
+  async getGraphVisualization(
+    @Param('projectId') projectId: string,
+    @Query('entityTypes') entityTypes?: string,
+    @Query('relationshipTypes') relationshipTypes?: string,
+    @Query('maxNodes') maxNodes?: string
+  ) {
+    const options: any = {};
+
+    if (entityTypes) {
+      options.entityTypes = entityTypes.split(',');
+    }
+
+    if (relationshipTypes) {
+      options.relationshipTypes = relationshipTypes.split(',');
+    }
+
+    if (maxNodes) {
+      options.maxNodes = parseInt(maxNodes);
+    }
+
+    return await this.searchService.getGraphVisualization(projectId, options);
+  }
+
+  /**
+   * Find critical entities (high connectivity)
+   */
+  @Get('critical/:projectId')
+  async findCriticalEntities(
+    @Param('projectId') projectId: string,
+    @Query('limit') limit?: string
+  ) {
+    return await this.searchService.findCriticalEntities(
+      projectId,
+      limit ? parseInt(limit) : 10
+    );
+  }
+
+  /**
+   * Find orphaned entities (no relationships)
+   */
+  @Get('orphaned/:projectId')
+  async findOrphanedEntities(@Param('projectId') projectId: string) {
+    return await this.searchService.findOrphanedEntities(projectId);
+  }
+
+  /**
+   * Get relationship statistics
+   */
+  @Get('relationship-stats/:projectId')
+  async getRelationshipStatistics(@Param('projectId') projectId: string) {
+    return await this.searchService.getRelationshipStatistics(projectId);
+  }
 }
