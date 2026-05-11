@@ -430,3 +430,6 @@ export class EntityExtractor {
     return files;
   }
 }
+
+// Singleton instance
+export const entityExtractor = new EntityExtractor();

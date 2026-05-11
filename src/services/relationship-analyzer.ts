@@ -102,7 +102,7 @@ export class RelationshipAnalyzer {
     const entity = await prisma.knowledgeEntity.findUnique({
       where: { id: entityId },
       include: {
-        outgoingRelationships: {
+        outgoingRelations: {
           include: {
             target: true,
           },
@@ -115,7 +115,7 @@ export class RelationshipAnalyzer {
       return;
     }
 
-    const dependencies = entity.outgoingRelationships
+    const dependencies = entity.outgoingRelations
       .filter((rel) => rel.target)
       .map((rel) => rel.target!.name);
 
@@ -127,7 +127,7 @@ export class RelationshipAnalyzer {
     });
 
     // Recurse into dependencies
-    for (const rel of entity.outgoingRelationships) {
+    for (const rel of entity.outgoingRelations) {
       if (rel.targetId) {
         await this.traverseDependencies(
           rel.targetId,
@@ -174,9 +174,10 @@ export class RelationshipAnalyzer {
 
     let relationshipsQuery: any = {
       where: {
-        projectId,
-        sourceId: { in: entityIds },
-        targetId: { in: entityIds },
+        AND: [
+          { sourceId: { in: entityIds } },
+          { targetId: { in: entityIds } },
+        ],
       },
     };
 
@@ -200,7 +201,7 @@ export class RelationshipAnalyzer {
         group: this.getNodeGroup(entity.type),
         size,
         metadata: {
-          filePath: entity.filePath,
+          sourceFile: entity.sourceFile,
           description: entity.description,
           outgoingCount: outgoing,
           incomingCount: incoming,
@@ -253,15 +254,15 @@ export class RelationshipAnalyzer {
     const entities = await prisma.knowledgeEntity.findMany({
       where: { projectId },
       include: {
-        outgoingRelationships: true,
-        incomingRelationships: true,
+        outgoingRelations: true,
+        incomingRelations: true,
       },
     });
 
     // Calculate criticality score
     const scored = entities.map((entity) => {
-      const incoming = entity.incomingRelationships.length;
-      const outgoing = entity.outgoingRelationships.length;
+      const incoming = entity.incomingRelations.length;
+      const outgoing = entity.outgoingRelations.length;
       const total = incoming + outgoing;
 
       // Criticality = weighted combination of incoming and total connections
@@ -274,7 +275,7 @@ export class RelationshipAnalyzer {
           name: entity.name,
           type: entity.type,
           description: entity.description,
-          filePath: entity.filePath,
+          sourceFile: entity.sourceFile,
         },
         incomingCount: incoming,
         outgoingCount: outgoing,
@@ -306,12 +307,12 @@ export class RelationshipAnalyzer {
         projectId,
         AND: [
           {
-            outgoingRelationships: {
+            outgoingRelations: {
               none: {},
             },
           },
           {
-            incomingRelationships: {
+            incomingRelations: {
               none: {},
             },
           },
@@ -367,24 +368,34 @@ export class RelationshipAnalyzer {
    * Get relationship statistics
    */
   async getRelationshipStatistics(projectId: string) {
-    const [byType, avgPerEntity] = await Promise.all([
-      prisma.relationship.groupBy({
-        by: ['type'],
-        where: { projectId },
-        _count: true,
+    // Get all entities for this project
+    const entities = await prisma.knowledgeEntity.findMany({
+      where: { projectId },
+      select: { id: true },
+    });
+
+    const entityIds = entities.map((e) => e.id);
+
+    // Get relationships where source or target is in this project
+    const [relationships, avgPerEntity] = await Promise.all([
+      prisma.relationship.findMany({
+        where: {
+          OR: [{ sourceId: { in: entityIds } }, { targetId: { in: entityIds } }],
+        },
+        select: { type: true },
       }),
       this.calculateAverageRelationshipsPerEntity(projectId),
     ]);
 
+    // Group by type
+    const byType: Record<string, number> = {};
+    for (const rel of relationships) {
+      byType[rel.type] = (byType[rel.type] || 0) + 1;
+    }
+
     return {
-      totalRelationships: byType.reduce((sum, item) => sum + item._count, 0),
-      byType: byType.reduce(
-        (acc, item) => {
-          acc[item.type] = item._count;
-          return acc;
-        },
-        {} as Record<string, number>
-      ),
+      totalRelationships: relationships.length,
+      byType,
       averagePerEntity: avgPerEntity,
     };
   }
@@ -395,12 +406,20 @@ export class RelationshipAnalyzer {
   private async calculateAverageRelationshipsPerEntity(
     projectId: string
   ): Promise<number> {
-    const [relationshipCount, entityCount] = await Promise.all([
-      prisma.relationship.count({ where: { projectId } }),
-      prisma.knowledgeEntity.count({ where: { projectId } }),
-    ]);
+    const entities = await prisma.knowledgeEntity.findMany({
+      where: { projectId },
+      select: { id: true },
+    });
 
-    return entityCount > 0 ? relationshipCount / entityCount : 0;
+    const entityIds = entities.map((e) => e.id);
+
+    const relationshipCount = await prisma.relationship.count({
+      where: {
+        OR: [{ sourceId: { in: entityIds } }, { targetId: { in: entityIds } }],
+      },
+    });
+
+    return entities.length > 0 ? relationshipCount / entities.length : 0;
   }
 }
 

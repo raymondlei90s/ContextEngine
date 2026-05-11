@@ -23,7 +23,7 @@ export interface SemanticSearchResult {
     name: string;
     type: string;
     description: string;
-    filePath: string;
+    sourceFile: string;
     metadata: any;
   };
   similarity: number;
@@ -82,7 +82,7 @@ export class KnowledgeGraphService {
               type: entity.type,
               name: entity.name,
               description: entity.description,
-              filePath: entity.filePath,
+              sourceFile: entity.sourceFile,
               lineNumber: entity.lineNumber,
               signature: entity.signature,
               metadata: entity.metadata as any,
@@ -109,7 +109,7 @@ export class KnowledgeGraphService {
             where: {
               projectId,
               OR: [
-                { filePath: rel.from },
+                { sourceFile: rel.from },
                 { name: rel.from.split(':').pop() },
               ],
             },
@@ -181,20 +181,21 @@ export class KnowledgeGraphService {
 
       // Semantic search using pgvector
       // Note: This uses raw SQL because Prisma doesn't natively support pgvector operators yet
-      const results = await prisma.$queryRaw<any[]>`
+      const embeddingStr = `[${queryEmbedding.embedding.join(',')}]`;
+      const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT
           id,
           name,
           type,
           description,
-          "filePath",
+          source_file as "sourceFile",
           metadata,
-          1 - (embedding <=> ${queryEmbedding.embedding}::vector) as similarity
+          1 - (embeddings <=> '${embeddingStr}'::vector) as similarity
         FROM knowledge_entities
-        WHERE "projectId" = ${projectId}
-        ORDER BY embedding <=> ${queryEmbedding.embedding}::vector
-        LIMIT ${limit}
-      `;
+        WHERE project_id = $1
+        ORDER BY embeddings <=> '${embeddingStr}'::vector
+        LIMIT $2
+      `, projectId, limit);
 
       const searchResults: SemanticSearchResult[] = results.map((r, index) => ({
         entity: {
@@ -202,7 +203,7 @@ export class KnowledgeGraphService {
           name: r.name,
           type: r.type,
           description: r.description,
-          filePath: r.filePath,
+          sourceFile: r.sourceFile,
           metadata: r.metadata,
         },
         similarity: r.similarity,
@@ -246,21 +247,22 @@ export class KnowledgeGraphService {
       }
 
       // Find similar entities using embedding similarity
-      const results = await prisma.$queryRaw<any[]>`
+      const embeddingStr = `[${(entity.embeddings as any).join(',')}]`;
+      const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT
           id,
           name,
           type,
           description,
-          "filePath",
+          source_file as "sourceFile",
           metadata,
-          1 - (embedding <=> ${entity.embedding}::vector) as similarity
+          1 - (embeddings <=> '${embeddingStr}'::vector) as similarity
         FROM knowledge_entities
-        WHERE "projectId" = ${entity.projectId}
-          AND id != ${entityId}
-        ORDER BY embedding <=> ${entity.embedding}::vector
-        LIMIT ${limit}
-      `;
+        WHERE project_id = $1
+          AND id != $2
+        ORDER BY embeddings <=> '${embeddingStr}'::vector
+        LIMIT $3
+      `, entity.projectId, entityId, limit);
 
       const relatedEntities: SemanticSearchResult[] = results.map((r, index) => ({
         entity: {
@@ -268,7 +270,7 @@ export class KnowledgeGraphService {
           name: r.name,
           type: r.type,
           description: r.description,
-          filePath: r.filePath,
+          sourceFile: r.sourceFile,
           metadata: r.metadata,
         },
         similarity: r.similarity,

@@ -85,7 +85,7 @@ export class DocumentationGenerator {
         wordCount: content.split(/\s+/).length,
         hasExamples: content.includes('```') || content.includes('@example'),
         relationshipCount:
-          (entity.outgoingRelationships?.length || 0) + (entity.incomingRelationships?.length || 0),
+          (entity.outgoingRelations?.length || 0) + (entity.incomingRelations?.length || 0),
       };
     }
 
@@ -110,10 +110,10 @@ export class DocumentationGenerator {
     const entities = await prisma.knowledgeEntity.findMany({
       where: { projectId },
       include: {
-        outgoingRelationships: {
+        outgoingRelations: {
           include: { target: true },
         },
-        incomingRelationships: {
+        incomingRelations: {
           include: { source: true },
         },
       },
@@ -182,11 +182,11 @@ export class DocumentationGenerator {
       lines.push('');
     }
 
-    if (options.includeRelationships && entity.outgoingRelationships?.length > 0) {
+    if (options.includeRelationships && entity.outgoingRelations?.length > 0) {
       lines.push('## Dependencies');
       lines.push('');
 
-      const grouped = this.groupRelationshipsByType(entity.outgoingRelationships);
+      const grouped = this.groupRelationshipsByType(entity.outgoingRelations);
 
       for (const [type, rels] of Object.entries(grouped)) {
         lines.push(`### ${this.capitalizeFirst(type)}`);
@@ -204,11 +204,11 @@ export class DocumentationGenerator {
       }
     }
 
-    if (options.includeRelationships && entity.incomingRelationships?.length > 0) {
+    if (options.includeRelationships && entity.incomingRelations?.length > 0) {
       lines.push('## Used By');
       lines.push('');
 
-      const grouped = this.groupRelationshipsByType(entity.incomingRelationships);
+      const grouped = this.groupRelationshipsByType(entity.incomingRelations);
 
       for (const [type, rels] of Object.entries(grouped)) {
         lines.push(`### ${this.capitalizeFirst(type)}`);
@@ -259,8 +259,8 @@ export class DocumentationGenerator {
       lines.push(` * @file ${entity.filePath}`);
     }
 
-    if (options.includeRelationships && entity.outgoingRelationships?.length > 0) {
-      const imports = entity.outgoingRelationships.filter((r: any) => r.type === 'imports');
+    if (options.includeRelationships && entity.outgoingRelations?.length > 0) {
+      const imports = entity.outgoingRelations.filter((r: any) => r.type === 'imports');
       if (imports.length > 0) {
         lines.push(' *');
         for (const rel of imports) {

@@ -1,0 +1,14 @@
+{
+  "name": "test-blog-app",
+  "version": "1.0.0",
+  "description": "Test blog application for ContextEngine",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
