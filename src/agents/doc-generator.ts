@@ -9,6 +9,8 @@ import logger from '../utils/logger.js';
 import { TargetAudience } from '../core/types.js';
 import { claudeCache } from '../services/claude-cache.js';
 import { metricsService } from '../services/metrics.js';
+import { withClaudeRetry } from '../utils/retry.js';
+import { DocumentationError, categorizeError, formatErrorForLog } from '../utils/errors.js';
 
 interface DocTask {
   id: string;
@@ -80,17 +82,20 @@ export class DocGeneratorAgent {
     }
 
     try {
-      const response = await this.client.messages.create({
-        model: config.anthropic.model,
-        max_tokens: 16384,
-        temperature: 0.7,
-        system: systemPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: userPrompt,
-          },
-        ],
+      // Call Claude API with retry logic
+      const response = await withClaudeRetry(async () => {
+        return await this.client.messages.create({
+          model: config.anthropic.model,
+          max_tokens: 16384,
+          temperature: 0.7,
+          system: systemPrompt,
+          messages: [
+            {
+              role: 'user',
+              content: userPrompt,
+            },
+          ],
+        });
       });
 
       // Extract text content
@@ -145,10 +150,13 @@ export class DocGeneratorAgent {
     } catch (error) {
       const duration = Date.now() - startTime;
 
+      // Categorize the error
+      const categorizedError = categorizeError(error);
+
       logger.error('Failed to generate documentation', {
         path: docTask.path,
-        error: error instanceof Error ? error.message : String(error),
         duration,
+        ...formatErrorForLog(categorizedError),
       });
 
       // Record failure metrics
@@ -159,7 +167,11 @@ export class DocGeneratorAgent {
         audience: docTask.metadata.audience,
       });
 
-      throw error;
+      // Throw a more specific error
+      throw DocumentationError.generationFailed(
+        docTask.path,
+        categorizedError.message
+      );
     }
   }
 

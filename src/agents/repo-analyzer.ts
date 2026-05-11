@@ -10,6 +10,7 @@ import { config } from '../core/config.js';
 import logger from '../utils/logger.js';
 import { RepoAnalysis } from '../core/types.js';
 import { claudeCache } from '../services/claude-cache.js';
+import { withClaudeRetry } from '../utils/retry.js';
 
 export class RepoAnalyzerAgent {
   private client: Anthropic;
@@ -218,15 +219,18 @@ export class RepoAnalyzerAgent {
       }
     }
 
-    const response = await this.client.messages.create({
-      model: config.anthropic.model,
-      max_tokens: 4096,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
+    // Call Claude API with retry logic
+    const response = await withClaudeRetry(async () => {
+      return await this.client.messages.create({
+        model: config.anthropic.model,
+        max_tokens: 4096,
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+      });
     });
 
     const content = response.content[0];
