@@ -1,0 +1,274 @@
+// ContextEngine Database Schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+// Projects (Documentation Products)
+model Project {
+  id        String   @id @default(uuid())
+  name      String
+  repoUrl   String   @map("repo_url")
+  repoType  String   @default("github") @map("repo_type") // github | gitlab
+
+  // Configuration
+  docFramework String @default("mintlify") @map("doc_framework") // mintlify | docusaurus | vitepress | starlight | docus | docsify
+  targetAudience String @default("developers") @map("target_audience") // developers | end-users | mixed
+  docStyle String @default("api-reference") @map("doc_style") // api-reference | user-guide | tutorial
+
+  // Status
+  status String @default("active") // active | paused | archived
+
+  // Metrics
+  freshnessScore  Decimal? @map("freshness_score") @db.Decimal(5, 4)
+  qualityScore    Decimal? @map("quality_score") @db.Decimal(5, 4)
+  coverageScore   Decimal? @map("coverage_score") @db.Decimal(5, 4)
+
+  // Timestamps
+  lastGeneratedAt DateTime? @map("last_generated_at")
+  lastCodeChangeAt DateTime? @map("last_code_change_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  jobs GenerationJob[]
+  docs GeneratedDoc[]
+  entities KnowledgeEntity[]
+
+  @@map("projects")
+}
+
+// Generation Jobs
+model GenerationJob {
+  id String @id @default(uuid())
+  projectId String @map("project_id")
+
+  // Trigger
+  triggerType String @map("trigger_type") // webhook | schedule | manual
+  triggerPayload Json? @map("trigger_payload")
+
+  // Status
+  status String @default("queued") // queued | running | completed | failed
+
+  // Execution
+  startedAt DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  errorMessage String? @map("error_message") @db.Text
+
+  // Metrics
+  tokenUsage Int? @map("token_usage")
+  durationMs Int? @map("duration_ms")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  docs GeneratedDoc[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("generation_jobs")
+}
+
+// Generated Documentation Files
+model GeneratedDoc {
+  id String @id @default(uuid())
+  projectId String @map("project_id")
+  jobId String @map("job_id")
+
+  // File info
+  filePath String @map("file_path")
+  content String @db.Text
+  checksum String
+  version Int @default(1)
+
+  // Metadata
+  title String?
+  description String? @db.Text
+  audience String? // developers | end-users
+  style String? // api-reference | user-guide | tutorial | how-to | explanatory
+
+  // Quality metrics
+  qualityScore Decimal? @map("quality_score") @db.Decimal(5, 4)
+  alignmentScore Decimal? @map("alignment_score") @db.Decimal(5, 4)
+
+  // Analytics
+  pageviews Int @default(0)
+  avgTimeOnPage Decimal? @map("avg_time_on_page") @db.Decimal(10, 2)
+  bounceRate Decimal? @map("bounce_rate") @db.Decimal(5, 4)
+  thumbsUp Int @default(0) @map("thumbs_up")
+  thumbsDown Int @default(0) @map("thumbs_down")
+
+  // Status
+  status String @default("draft") // draft | published | archived
+  publishedAt DateTime? @map("published_at")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  job GenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([jobId])
+  @@index([status])
+  @@index([publishedAt])
+  @@unique([projectId, filePath, version])
+  @@map("generated_docs")
+}
+
+// Knowledge Graph Entities
+model KnowledgeEntity {
+  id String @id @default(uuid())
+  projectId String @map("project_id")
+
+  // Entity info
+  type String // Class | Function | API | Concept | Product
+  name String
+  description String? @db.Text
+
+  // Embeddings (for vector search)
+  // Using Unsupported("vector(1536)") for pgvector
+  embeddings Unsupported("vector(1536)")?
+
+  // Metadata
+  metadata Json?
+
+  // Source
+  sourceFile String? @map("source_file")
+  sourceLine Int? @map("source_line")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  outgoingRelations Relationship[] @relation("SourceEntity")
+  incomingRelations Relationship[] @relation("TargetEntity")
+
+  @@index([projectId])
+  @@index([type])
+  @@index([name])
+  @@map("knowledge_entities")
+}
+
+// Knowledge Graph Relationships
+model Relationship {
+  id String @id @default(uuid())
+
+  sourceId String @map("source_id")
+  targetId String @map("target_id")
+
+  // Relationship info
+  type String // DEPENDS_ON | IMPLEMENTS | DOCUMENTED_IN | RELATED_TO
+  strength Decimal @default(1.0) @db.Decimal(5, 4) // 0-1 confidence score
+
+  // Metadata
+  metadata Json?
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  source KnowledgeEntity @relation("SourceEntity", fields: [sourceId], references: [id], onDelete: Cascade)
+  target KnowledgeEntity @relation("TargetEntity", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId])
+  @@index([targetId])
+  @@index([type])
+  @@unique([sourceId, targetId, type])
+  @@map("relationships")
+}
+
+// Prompt Variants (for learning loop)
+model PromptVariant {
+  id String @id @default(uuid())
+
+  // Prompt info
+  template String @db.Text
+  audience String // developers | end-users
+  style String // api-reference | user-guide | tutorial
+
+  // Performance metrics
+  avgQualityScore Decimal? @map("avg_quality_score") @db.Decimal(5, 4)
+  avgAlignmentScore Decimal? @map("avg_alignment_score") @db.Decimal(5, 4)
+  usageCount Int @default(0) @map("usage_count")
+
+  // Evolution metadata
+  parentPromptId String? @map("parent_prompt_id")
+  generation Int @default(0)
+
+  // Status
+  status String @default("testing") // testing | active | retired
+  retiredAt DateTime? @map("retired_at")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([audience, style])
+  @@index([status])
+  @@index([avgQualityScore])
+  @@map("prompt_variants")
+}
+
+// Webhooks (event tracking)
+model Webhook {
+  id String @id @default(uuid())
+
+  // Webhook info
+  provider String // github | gitlab | jira | confluence | slack
+  eventType String @map("event_type")
+  payload Json
+
+  // Processing
+  status String @default("pending") // pending | processing | processed | failed
+  processedAt DateTime? @map("processed_at")
+  errorMessage String? @map("error_message") @db.Text
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([provider])
+  @@index([status])
+  @@index([createdAt])
+  @@map("webhooks")
+}
+
+// Analytics Events
+model AnalyticsEvent {
+  id String @id @default(uuid())
+
+  // Event info
+  eventType String @map("event_type") // page_view | thumbs_up | thumbs_down | feedback | search | chat
+  entityType String? @map("entity_type") // doc | project | chat
+  entityId String? @map("entity_id")
+
+  // Context
+  userId String? @map("user_id")
+  sessionId String? @map("session_id")
+  metadata Json?
+
+  // Timestamp
+  timestamp DateTime @default(now())
+
+  @@index([eventType])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@map("analytics_events")
+}
