@@ -6,8 +6,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "api:dev": "tsx watch src/api/main.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "api:start": "node dist/api/main.js",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
     "lint": "eslint src --ext .ts",
