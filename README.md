@@ -38,7 +38,7 @@ Manual Docs (static)          →    ContextEngine (living)
 
 ## 🚀 Features
 
-### Current (v0.1.0 - Foundation)
+### Current (v0.1.0 - Phase 1 Complete! 🎉)
 
 - ✅ **Cloud-ready architecture** - Dockerized, PostgreSQL + Redis + Neo4j
 - ✅ **Event-driven** - GitHub/GitLab webhook handling
@@ -47,15 +47,24 @@ Manual Docs (static)          →    ContextEngine (living)
 - ✅ **Database schema** - Complete Prisma schema with pgvector support
 - ✅ **Type-safe** - Full TypeScript with strict mode
 - ✅ **Logging & monitoring** - Winston logger, Prometheus/Grafana ready
+- ✅ **REST API** - NestJS API with 13 endpoints
+- ✅ **Three core agents** - Repo Analyzer, Doc Planner, Doc Generator
+- ✅ **Mintlify output** - Complete MDX + mint.json generation
+- ✅ **End-to-end pipeline** - Webhook → Queue → Agents → Database → Files
+- ✅ **Integration tests** - Full pipeline validation
 
 ### Roadmap
 
-**Phase 1 (Months 1-2): Cloud Infrastructure** ✅ CURRENT
+**Phase 1 (Foundation)** ✅ COMPLETE
 - [x] Containerization & deployment
-- [x] API gateway setup
+- [x] API gateway (NestJS)
 - [x] Event queue & webhook handling
-- [ ] REST API endpoints
-- [ ] Health checks & monitoring
+- [x] REST API endpoints (13 endpoints)
+- [x] Health checks & monitoring
+- [x] Three core agents (Analyzer, Planner, Generator)
+- [x] Mintlify adapter
+- [x] End-to-end pipeline
+- [x] Integration tests
 
 **Phase 2 (Months 3-4): Knowledge Graph**
 - [ ] pgvector integration for semantic search
@@ -88,6 +97,97 @@ Manual Docs (static)          →    ContextEngine (living)
 - [ ] Smart notifications
 - [ ] Self-healing
 - [ ] 95%+ freshness achievement
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 20+
+- Docker & Docker Compose
+- Anthropic API key ([get one here](https://console.anthropic.com))
+
+### 1. Clone and Install
+
+```bash
+git clone https://github.com/YOUR_ORG/ContextEngine.git
+cd ContextEngine
+npm install
+```
+
+### 2. Set Up Environment
+
+```bash
+cp .env.example .env
+# Edit .env and add your ANTHROPIC_API_KEY
+```
+
+### 3. Start Infrastructure
+
+```bash
+# Start PostgreSQL, Redis, Neo4j
+npm run docker:up
+
+# Wait 10 seconds for databases to initialize
+
+# Run database migrations
+npm run db:migrate
+npm run db:generate
+```
+
+### 4. Run Integration Test
+
+```bash
+# Test the complete end-to-end pipeline
+npm run test:integration
+
+# This will:
+# 1. Create a test project
+# 2. Analyze SGDS Web Component repository
+# 3. Plan documentation structure
+# 4. Generate 3 sample documents
+# 5. Write Mintlify MDX files to output/
+# 6. Show you the results
+```
+
+### 5. Start the API (Optional)
+
+```bash
+# Start the API gateway
+npm run api:dev
+
+# API runs on http://localhost:3000
+# Try: curl http://localhost:3000/api/v1/health
+```
+
+### 6. Start the Worker (Optional)
+
+```bash
+# Start the background worker
+npm run dev
+
+# This enables:
+# - Webhook processing
+# - Job queue workers
+# - Autonomous scheduling
+```
+
+### 7. View Results
+
+```bash
+# View generated documentation
+ls -la output/test-*/
+
+# View Mintlify config
+cat output/test-*/mint.json
+
+# View a generated doc
+cat output/test-*/getting-started/introduction.mdx
+
+# Open database UI
+npm run db:studio
+```
 
 ---
 
@@ -260,41 +360,68 @@ GITLAB_WEBHOOK_SECRET=your_secret
 
 ### Register a Project
 
-```typescript
-// TODO: API endpoints to be implemented
-POST /api/v1/projects
-{
-  "name": "TechPass API",
-  "repoUrl": "https://github.com/GovTechSG/techpass-api",
-  "repoType": "github",
-  "docFramework": "mintlify",
-  "targetAudience": "developers",
-  "docStyle": "api-reference"
-}
+```bash
+curl -X POST http://localhost:3000/api/v1/projects \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "TechPass API",
+    "repoUrl": "https://github.com/GovTechSG/techpass-api",
+    "repoType": "github",
+    "docFramework": "mintlify"
+  }'
 ```
 
 ### Trigger Documentation Generation
 
 ```bash
-# Via webhook (automatic on git push)
-# Configure webhook in GitHub/GitLab
-
 # Via API (manual trigger)
-POST /api/v1/projects/:id/generate
+curl -X POST http://localhost:3000/api/v1/projects/{PROJECT_ID}/generate
+
+# Via webhook (automatic on git push)
+# Configure webhook in GitHub/GitLab to POST to:
+# http://your-server/api/v1/webhooks/github
+# or
+# http://your-server/api/v1/webhooks/gitlab
 
 # Via schedule (automatic daily freshness audit)
 # Enabled when ENABLE_AUTONOMOUS_MODE=true
+# Runs daily at 2 AM
 ```
 
-### Monitor Jobs
+### Monitor Progress
 
 ```bash
-# Check queue stats
-GET /api/v1/queues/doc-update/stats
+# Get project metrics
+curl http://localhost:3000/api/v1/projects/{PROJECT_ID}/metrics
 
-# View job status
-GET /api/v1/jobs/:jobId
+# List all projects
+curl http://localhost:3000/api/v1/projects
+
+# Check health
+curl http://localhost:3000/api/v1/health
 ```
+
+### API Endpoints
+
+**Health**:
+- `GET /api/v1/health` - Full health check
+- `GET /api/v1/health/liveness` - Liveness probe
+- `GET /api/v1/health/readiness` - Readiness probe
+
+**Projects**:
+- `POST /api/v1/projects` - Create project
+- `GET /api/v1/projects` - List all projects
+- `GET /api/v1/projects/:id` - Get project details
+- `POST /api/v1/projects/:id/generate` - Trigger generation
+- `GET /api/v1/projects/:id/metrics` - Get metrics
+
+**Webhooks**:
+- `POST /api/v1/webhooks/github` - GitHub webhook
+- `POST /api/v1/webhooks/gitlab` - GitLab webhook
+
+**Jobs**:
+- `GET /api/v1/jobs/:id` - Get job status
+- `GET /api/v1/jobs/project/:projectId` - Get project jobs
 
 ---
 

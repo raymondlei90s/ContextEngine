@@ -12,6 +12,7 @@
     "api:start": "node dist/api/main.js",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
+    "test:integration": "tsx test-integration.ts",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "db:migrate": "prisma migrate dev",
