@@ -9,6 +9,7 @@ import path from 'path';
 import { config } from '../core/config.js';
 import logger from '../utils/logger.js';
 import { RepoAnalysis } from '../core/types.js';
+import { claudeCache } from '../services/claude-cache.js';
 
 export class RepoAnalyzerAgent {
   private client: Anthropic;
@@ -177,6 +178,45 @@ export class RepoAnalyzerAgent {
    */
   private async analyzeWithClaude(repoInfo: any): Promise<RepoAnalysis> {
     const prompt = this.buildAnalysisPrompt(repoInfo);
+    const systemPrompt = 'You are a repository analyzer. Return only valid JSON.';
+
+    // Check cache first
+    const cached = await claudeCache.get(config.anthropic.model, systemPrompt, prompt);
+    if (cached) {
+      logger.info('Using cached analysis', {
+        repoName: repoInfo.repoName,
+        cachedAt: cached.cachedAt,
+      });
+
+      // Parse cached content
+      const jsonMatch = cached.content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const analysis = JSON.parse(jsonMatch[0]);
+
+        return {
+          projectType: analysis.projectType || 'unknown',
+          technology: {
+            primary: analysis.technology?.primary || 'unknown',
+            framework: analysis.technology?.framework,
+          },
+          targetAudience: {
+            primary: analysis.targetAudience?.primary || 'developers',
+            secondary: analysis.targetAudience?.secondary,
+            reasoning: analysis.targetAudience?.reasoning || '',
+          },
+          documentationStyle: {
+            primary: analysis.documentationStyle?.primary || 'api-reference',
+            secondary: analysis.documentationStyle?.secondary,
+          },
+          structure: {
+            entrypoint: analysis.structure?.entrypoint,
+            components: analysis.structure?.components || [],
+            apis: analysis.structure?.apis || [],
+            utilities: analysis.structure?.utilities || [],
+          },
+        };
+      }
+    }
 
     const response = await this.client.messages.create({
       model: config.anthropic.model,
@@ -193,6 +233,16 @@ export class RepoAnalyzerAgent {
     if (content.type !== 'text') {
       throw new Error('Unexpected response type from Claude');
     }
+
+    // Cache the response
+    const tokensUsed = response.usage.input_tokens + response.usage.output_tokens;
+    await claudeCache.set(
+      config.anthropic.model,
+      systemPrompt,
+      prompt,
+      content.text,
+      tokensUsed
+    );
 
     // Parse JSON response
     const jsonMatch = content.text.match(/\{[\s\S]*\}/);

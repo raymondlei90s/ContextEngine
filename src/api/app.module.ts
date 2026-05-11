@@ -8,6 +8,7 @@ import { ProjectsModule } from './projects/projects.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
 import { HealthModule } from './health/health.module.js';
+import { MetricsModule } from './metrics/metrics.module.js';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { HealthModule } from './health/health.module.js';
     WebhooksModule,
     JobsModule,
     HealthModule,
+    MetricsModule,
   ],
 })
 export class AppModule {}

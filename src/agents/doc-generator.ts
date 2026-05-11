@@ -7,6 +7,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../core/config.js';
 import logger from '../utils/logger.js';
 import { TargetAudience } from '../core/types.js';
+import { claudeCache } from '../services/claude-cache.js';
+import { metricsService } from '../services/metrics.js';
 
 interface DocTask {
   id: string;
@@ -40,6 +42,8 @@ export class DocGeneratorAgent {
    * Generate documentation for a task
    */
   async generateDoc(docTask: DocTask, repoContext: any): Promise<GeneratedDoc> {
+    const startTime = Date.now();
+
     logger.info('Generating documentation', {
       path: docTask.path,
       audience: docTask.metadata.audience,
@@ -47,6 +51,33 @@ export class DocGeneratorAgent {
 
     const systemPrompt = this.buildSystemPrompt(docTask);
     const userPrompt = this.buildUserPrompt(docTask, repoContext);
+
+    // Check cache first
+    const cached = await claudeCache.get(config.anthropic.model, systemPrompt, userPrompt);
+    if (cached) {
+      const duration = Date.now() - startTime;
+
+      logger.info('Using cached documentation', {
+        path: docTask.path,
+        tokensUsed: cached.tokensUsed,
+        cachedAt: cached.cachedAt,
+      });
+
+      // Record metrics
+      metricsService.recordDocGeneration({
+        success: true,
+        duration,
+        tokensUsed: cached.tokensUsed,
+        audience: docTask.metadata.audience,
+        cached: true,
+      });
+
+      return {
+        success: true,
+        content: cached.content,
+        tokensUsed: cached.tokensUsed,
+      };
+    }
 
     try {
       const response = await this.client.messages.create({
@@ -79,10 +110,31 @@ export class DocGeneratorAgent {
 
       const tokensUsed = response.usage.input_tokens + response.usage.output_tokens;
 
+      // Cache the response
+      await claudeCache.set(
+        config.anthropic.model,
+        systemPrompt,
+        userPrompt,
+        mdxContent,
+        tokensUsed
+      );
+
+      const duration = Date.now() - startTime;
+
       logger.info('Documentation generated', {
         path: docTask.path,
         tokensUsed,
         contentLength: mdxContent.length,
+        duration,
+      });
+
+      // Record metrics
+      metricsService.recordDocGeneration({
+        success: true,
+        duration,
+        tokensUsed,
+        audience: docTask.metadata.audience,
+        cached: false,
       });
 
       return {
@@ -91,9 +143,20 @@ export class DocGeneratorAgent {
         tokensUsed,
       };
     } catch (error) {
+      const duration = Date.now() - startTime;
+
       logger.error('Failed to generate documentation', {
         path: docTask.path,
         error: error instanceof Error ? error.message : String(error),
+        duration,
+      });
+
+      // Record failure metrics
+      metricsService.recordDocGeneration({
+        success: false,
+        duration,
+        tokensUsed: 0,
+        audience: docTask.metadata.audience,
       });
 
       throw error;
