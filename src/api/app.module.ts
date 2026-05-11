@@ -9,6 +9,7 @@ import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
 import { HealthModule } from './health/health.module.js';
 import { MetricsModule } from './metrics/metrics.module.js';
+import { SearchModule } from './search/search.module.js';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { MetricsModule } from './metrics/metrics.module.js';
     JobsModule,
     HealthModule,
     MetricsModule,
+    SearchModule,
   ],
 })
 export class AppModule {}
